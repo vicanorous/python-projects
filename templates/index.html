@@ -3,65 +3,217 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Dynamic Guessing Game</title>
+  <title>The Taunting Number Game</title>
   <style>
-    body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; background: #f4f4f9; }
-    .card { background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); text-align: center; width: 300px; }
-    input { width: 80%; padding: 0.5rem; font-size: 1rem; margin-bottom: 1rem; border: 1px solid #ccc; border-radius: 4px; }
-    button { padding: 0.5rem 1rem; font-size: 1rem; background: #0066ff; color: white; border: none; border-radius: 4px; cursor: pointer; }
-    .feedback { margin-top: 1rem; font-weight: bold; min-height: 24px; }
-    .win { color: green; }
-    .info { color: #d97706; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', Roboto, sans-serif;
+      background: #0f172a;
+      color: #f8fafc;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      overflow: hidden; /* Keep floating characters inside viewport */
+      position: relative;
+    }
+
+    .game-card {
+      background: #1e293b;
+      padding: 2.5rem;
+      border-radius: 16px;
+      box-shadow: 0 20px 25px -5px rgba(0,0,0,0.5), 0 8px 10px -6px rgba(0,0,0,0.5);
+      width: 360px;
+      text-align: center;
+      z-index: 10; /* Keep card above floating elements */
+      border: 1px solid #334155;
+    }
+
+    h2 { margin-bottom: 1rem; color: #38bdf8; font-size: 1.75rem; }
+    p.subtitle { color: #94a3b8; font-size: 0.9rem; margin-bottom: 1.5rem; }
+
+    input[type="number"] {
+      width: 100%;
+      padding: 0.8rem;
+      font-size: 1.25rem;
+      text-align: center;
+      border-radius: 8px;
+      border: 2px solid #334155;
+      background: #0f172a;
+      color: #fff;
+      outline: none;
+      margin-bottom: 1rem;
+    }
+    input[type="number"]:focus { border-color: #38bdf8; }
+
+    button {
+      width: 100%;
+      padding: 0.8rem;
+      font-size: 1rem;
+      font-weight: bold;
+      background: #38bdf8;
+      color: #0f172a;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: transform 0.1s, background 0.2s;
+    }
+    button:hover { background: #7dd3fc; }
+    button:active { transform: scale(0.98); }
+
+    .feedback {
+      margin-top: 1.25rem;
+      font-size: 1.1rem;
+      font-weight: 600;
+      min-height: 28px;
+    }
+
+    /* Screen shake effect on wrong guess */
+    .shake {
+      animation: shake 0.4s ease-in-out;
+    }
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      20% { transform: translateX(-10px) rotate(-1deg); }
+      40% { transform: translateX(10px) rotate(1deg); }
+      60% { transform: translateX(-6px); }
+      80% { transform: translateX(6px); }
+    }
+
+    /* Floating Taunt Element Styles */
+    .floating-taunt {
+      position: absolute;
+      pointer-events: none; /* Mouse passes through */
+      font-weight: 900;
+      font-size: 1.25rem;
+      white-space: nowrap;
+      z-index: 1;
+      animation: floatUpAndFade 3.5s forwards cubic-bezier(0.2, 0.8, 0.2, 1);
+      text-shadow: 0 0 10px rgba(0, 0, 0, 0.8);
+    }
+
+    @keyframes floatUpAndFade {
+      0% {
+        opacity: 0;
+        transform: translateY(20px) scale(0.5) rotate(0deg);
+      }
+      15% {
+        opacity: 1;
+        transform: translateY(-20px) scale(1.2) rotate(var(--rot));
+      }
+      80% {
+        opacity: 0.8;
+      }
+      100% {
+        opacity: 0;
+        transform: translateY(-250px) scale(1) rotate(calc(var(--rot) * 2));
+      }
+    }
   </style>
 </head>
 <body>
 
-  <div class="card">
-    <h2>Guess (1-100)</h2>
+  <div class="game-card" id="card">
+    <h2>Can You Guess It?</h2>
+    <p class="subtitle">Pick a number between 1 and 100</p>
+
     <form id="guess-form">
-      <input type="number" id="guess-input" min="1" max="100" required placeholder="Enter number...">
-      <button type="submit">Submit Guess</button>
+      <input type="number" id="guess-input" min="1" max="100" required placeholder="Type here..." autofocus>
+      <button type="submit">Take a Shot</button>
     </form>
 
     <div id="feedback" class="feedback"></div>
-    <div id="attempt-counter" style="color: #666; font-size: 0.85rem; margin-top: 0.5rem;"></div>
   </div>
 
   <script>
     const form = document.getElementById('guess-form');
     const guessInput = document.getElementById('guess-input');
     const feedback = document.getElementById('feedback');
-    const attemptCounter = document.getElementById('attempt-counter');
+    const card = document.getElementById('card');
+
+    // Taunt templates for wrong guesses
+    const tauntPhrases = [
+      "🤡 Is that really your best guess?",
+      "📉 Terrible choice!",
+      "🙈 My eyes! Try harder!",
+      "💩 Not even close!",
+      "📊 Statistics say you're struggling.",
+      "🤖 A toaster guesses better than this.",
+      "💤 Yawn... try again!",
+      "🌶️ Oof, spicy bad guess!"
+    ];
+
+    // Celebration phrases for winning
+    const winPhrases = [
+      "👑 ABSOLUTE GENIUS!",
+      "🎉 YOU DID IT!",
+      "🔥 UNSTOPPABLE!",
+      "🚀 TO THE MOON! CORRECT!",
+      "🏆 CHAMPION!"
+    ];
 
     form.addEventListener('submit', async function(e) {
-      // Prevent the page from refreshing on form submit
       e.preventDefault();
-
       const userGuess = guessInput.value;
 
-      // Send the AJAX request to Flask endpoint
       const response = await fetch('/guess', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ guess: userGuess })
       });
 
       const data = await response.json();
-
-      // Update the UI dynamically based on the JSON response
       feedback.textContent = data.message;
-      attemptCounter.textContent = `Attempts: ${data.attempts}`;
 
       if (data.status === 'win') {
-        feedback.className = 'feedback win';
+        feedback.style.color = '#4ade80';
+        spawnFloatingBatch(winPhrases, '#4ade80', 12); // Spawn lots of green congratulations
         guessInput.value = '';
       } else {
-        feedback.className = 'feedback info';
-        guessInput.select(); // Highlight input field for fast re-typing
+        feedback.style.color = '#f87171';
+        
+        // Trigger card shake
+        card.classList.remove('shake');
+        void card.offsetWidth; // Force CSS reflow
+        card.classList.add('shake');
+
+        spawnFloatingBatch(tauntPhrases, '#f87171', 4); // Spawn red floating taunts
+        guessInput.select();
       }
     });
+
+    // Helper: Spawns floating DOM nodes around the screen
+    function spawnFloatingBatch(phrasesArray, color, count) {
+      for (let i = 0; i < count; i++) {
+        setTimeout(() => {
+          const text = phrasesArray[Math.floor(Math.random() * phrasesArray.length)];
+          createFloatingText(text, color);
+        }, i * 120); // Stagger spawning times slightly
+      }
+    }
+
+    function createFloatingText(text, color) {
+      const el = document.createElement('div');
+      el.className = 'floating-taunt';
+      el.textContent = text;
+      el.style.color = color;
+
+      // Randomize position across screen width
+      const randomX = Math.random() * 80 + 10; // Between 10% and 90% viewport width
+      const randomY = Math.random() * 20 + 60; // Start lower third of screen
+      const randomRotation = (Math.random() - 0.5) * 40; // Rotation between -20deg and 20deg
+
+      el.style.left = `${randomX}vw`;
+      el.style.top = `${randomY}vh`;
+      el.style.setProperty('--rot', `${randomRotation}deg`);
+
+      document.body.appendChild(el);
+
+      // Clean up DOM node after animation finishes (3.5s)
+      setTimeout(() => {
+        el.remove();
+      }, 3500);
+    }
   </script>
 </body>
 </html>
